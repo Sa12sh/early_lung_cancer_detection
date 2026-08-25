@@ -1,0 +1,13 @@
+# Security
+.env
+
+# Python specific
+__pycache__/
+*.pyc
+
+# Virtual Environments
+venv/
+env/
+
+# Large Model Files (Optional, see note below)
+# models/*.h5
