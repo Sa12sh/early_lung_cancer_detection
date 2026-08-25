@@ -1,42 +1,29 @@
 from dotenv import load_dotenv
-
-# Load the hidden environment variables
 load_dotenv()
 import os
 os.environ['TF_USE_LEGACY_KERAS'] = '1'
-
 import streamlit as st
 import numpy as np
 import pandas as pd
 from PIL import Image
 import cv2
 import tensorflow as tf
-from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model  # type: ignore
 import xgboost as xgb
 import joblib
-
-# Google Gemini API
 from google import genai
 from google.genai import types
-
-# ==========================================
-# PAGE CONFIGURATION
-# ==========================================
 st.set_page_config(
-    page_title="PulmoGuard AI | Multimodal CDSS", 
+    page_title="Clinical Decision Support System for early lung cancer detection using Adam And GWO Optimized CNN", 
     layout="wide", 
     initial_sidebar_state="expanded"
 )
 
-# Initialize Session State so the app remembers the Patient's Stage and keeps the images on screen!
 if 'stage_label' not in st.session_state:
     st.session_state.stage_label = "Pending Diagnosis (No scan analyzed yet)"
 if 'pipeline_run' not in st.session_state:
     st.session_state.pipeline_run = False
 
-# ==========================================
-# 1. MODEL & METADATA LOADER
-# ==========================================
 @st.cache_resource
 def load_all_models():
     if not os.path.exists('models'):
@@ -48,7 +35,6 @@ def load_all_models():
     meta_path = 'models/xgboost_metadata.joblib'
     
     try:
-        # load=False is critical to bypass custom loss function errors during inference
         adam_m = load_model(adam_path, compile=False) if os.path.exists(adam_path) else None
         gwo_m = load_model(gwo_path, compile=False) if os.path.exists(gwo_path) else None
         
@@ -66,10 +52,6 @@ def load_all_models():
 
 adam_model, gwo_model, xgb_model, xgb_meta = load_all_models()
 
-# ==========================================
-# 2. GEMINI AI DIETARY ADVISOR SETUP
-# ==========================================
-# Securely fetch the API key from the local .env file
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 try:
@@ -77,7 +59,6 @@ try:
 except Exception:
     gemini_client = None
 
-# NEW PROMPT: Bypasses the annoying AI medical disclaimers!
 SYSTEM_PROMPT = """
 You are a calm, reassuring, and cautious oncology dietary and lifestyle advisor.
 
@@ -110,15 +91,14 @@ def ask_dietary_guidance(query: str, stage: str, symptoms: list) -> str:
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 temperature=0.1 
-                # Removed max_output_tokens so it NEVER gets cut off midway again!
+              
             )
         )
-        return response.text.strip()
+        return response.text.strip() if response.text else "Please consult your oncologist."
     except Exception as e:
         return f"CRASH REPORT: {str(e)}"
-# ==========================================
-# 3. VISION PROCESSING & PHYSICS ENGINE
-# ==========================================
+
+
 def validate_ct_scan(img_array):
     if len(img_array.shape) == 3 and img_array.shape[2] == 3:
         std_dev = np.std(img_array, axis=2)
@@ -163,14 +143,9 @@ def ajcc_tnm_staging(diameter_cm):
     elif 5.0 < diameter_cm <= 7.0: return "Stage III", "T3 Locally Advanced Tumor"
     else: return "Stage IV", "T4 Advanced / Metastatic Involvement"
 
-# ==========================================
-# 4. RULE-BASED HOLISTIC CARE ENGINE
-# ==========================================
+
 def generate_holistic_care_plan(stage_label, symp_fatigue, symp_weight, symp_sob):
     
-    # ==========================================
-    # 1. PHYSICAL EXERCISE & REHABILITATION
-    # ==========================================
     if stage_label == "Normal":
         physical = (
             "- Maintain 150 minutes of moderate aerobic exercise per week.\n"
@@ -219,9 +194,7 @@ def generate_holistic_care_plan(stage_label, symp_fatigue, symp_weight, symp_sob
         physical_list[-2] = "- ⚠️ CRITICAL: Utilize pursed-lip breathing to control breathlessness."
         physical = '\n'.join(physical_list)
 
-    # ==========================================
-    # 2. MENTAL WELLNESS
-    # ==========================================
+
     if stage_label == "Normal":
         mental = (
             "- Practice daily mindfulness or meditation for 10-15 minutes.\n"
@@ -263,9 +236,7 @@ def generate_holistic_care_plan(stage_label, symp_fatigue, symp_weight, symp_sob
             "- Utilize spiritual or pastoral care if aligned with personal beliefs."
         )
 
-    # ==========================================
-    # 3. DIET & NUTRITIONAL SUPPORT
-    # ==========================================
+    
     if stage_label == "Normal":
         nutrition = (
             "- Follow a Mediterranean-style diet rich in fresh vegetables and fruits.\n"
@@ -314,9 +285,7 @@ def generate_holistic_care_plan(stage_label, symp_fatigue, symp_weight, symp_sob
         nutrition_list[-2] = "- ⚠️ CRITICAL: Drink high-protein clinical supplements between every meal."
         nutrition = '\n'.join(nutrition_list)
 
-    # ==========================================
-    # 4. LIFESTYLE & PREVENTATIVE CARE
-    # ==========================================
+
     if stage_label == "Normal":
         lifestyle = (
             "- Adhere strictly to annual health and preventative oncology screenings.\n"
@@ -359,10 +328,9 @@ def generate_holistic_care_plan(stage_label, symp_fatigue, symp_weight, symp_sob
         )
 
     return physical, mental, nutrition, lifestyle
-# ==========================================
-# 5. STREAMLIT USER INTERFACE & SIDEBAR
-# ==========================================
-st.title("PulmoGuard AI | Multimodal Clinical Decision Support System")
+
+
+st.title("Clinical Decision Support System for early lung cancer detection using Adam And GWO Optimized CNN")
 st.markdown("Automated TNM Staging, Data-Driven Treatment Planning, & Recommendation Support System.")
 
 with st.sidebar:
@@ -394,6 +362,7 @@ uploaded_file = st.file_uploader("Upload Axial CT Scan Slice (DICOM-derived PNG/
 if uploaded_file is None:
     st.session_state.pipeline_run = False
     st.info("Awaiting CT scan slice upload to initiate inference.")
+    st.info("Note: please only upload actual CT scan of lungs")
 else:
     # Save the button click to memory
     if st.button("Run Full Clinical Diagnostic Pipeline"):
@@ -517,9 +486,7 @@ else:
                 with c_life:
                     st.error(f"**🛌 Lifestyle & Routine**\n\n{rec_life}")
 
-# ==========================================
-# 7. GEMINI ONCOLOGY DIETARY & LIFESTYLE ASSISTANT
-# ==========================================
+
 st.divider()
 st.subheader("💬 Patient Dietary & Lifestyle Assistant")
 st.caption("Ask specific food or activity questions (e.g., *'Can I eat mutton?'*). The AI automatically factors in your current cancer stage and active symptoms to keep advice medically safe and concise.")
